@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Antivirus</title>
+<title>The... end?</title>
+
 <style>
 html, body {
     margin: 0;
@@ -13,7 +14,6 @@ html, body {
     background: black;
 }
 
-/* ================= SCREEN ================= */
 #screen {
     width: 100%;
     height: 100%;
@@ -21,7 +21,6 @@ html, body {
     position: relative;
 }
 
-/* Title */
 #title {
     position: absolute;
     top: 70px;
@@ -32,7 +31,6 @@ html, body {
     font-weight: bold;
 }
 
-/* Spinner centered */
 .spinner {
     position: absolute;
     top: 45%;
@@ -42,7 +40,6 @@ html, body {
     height: 80px;
 }
 
-/* Spinner dots */
 .spinner div {
     position: absolute;
     width: 8px;
@@ -58,7 +55,6 @@ html, body {
     to { opacity: 0; }
 }
 
-/* Status text LOWER */
 #status {
     position: absolute;
     bottom: 120px;
@@ -67,7 +63,6 @@ html, body {
     font-size: 18px;
 }
 
-/* Popups */
 .popup {
     position: fixed;
     top: 50%;
@@ -86,40 +81,24 @@ button {
     cursor: pointer;
 }
 
-/* Blackout / NO overlay */
-#blackout {
+#message {
     position: fixed;
-    inset: 0;
-    background: black;
+    top: 30%;
+    width: 100%;
+    text-align: center;
+    font-size: 24px;
+    color: black;
     display: none;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    z-index: 200;
 }
 
-#wrongText {
-    color: red;
-    font-size: 64px;
-    font-weight: bold;
-}
-
-#subText {
-    color: lime;
-    margin-top: 15px;
-    font-size: 20px;
-}
-
-/* Transition overlay for between videos */
 #transition {
     position: fixed;
     inset: 0;
     background: black;
     display: none;
-    z-index: 500; /* less than subtitles */
+    z-index: 500;
 }
 
-/* Subtitles */
 #subtitles {
     position: fixed;
     bottom: 20px;
@@ -131,7 +110,6 @@ button {
     z-index: 600;
 }
 
-/* Video styling */
 video {
     position: fixed;
     left: 50%;
@@ -142,17 +120,6 @@ video {
     object-fit: contain;
     display: none;
     z-index: 400;
-}
-
-/* Fake cursor */
-#fakeCursor {
-    position: fixed;
-    width: 20px;
-    height: 20px;
-    background: white;
-    clip-path: polygon(0 0, 0 100%, 25% 75%, 45% 100%, 55% 95%, 35% 70%, 60% 70%);
-    display: none;
-    z-index: 9999;
 }
 </style>
 </head>
@@ -171,16 +138,7 @@ video {
     <button id="noBtn">NO</button>
 </div>
 
-<div id="blackout">
-    <div id="wrongText"></div>
-    <div id="subText"></div>
-</div>
-
-<div class="popup" id="popup2" style="display:none;">
-    <div>do you wish to terminate this device?</div>
-    <button id="yesAuto">YES</button>
-    <button>NO</button>
-</div>
+<div id="message">you got a pretty serious virus on your laptop. just press yes kiddo</div>
 
 <div id="transition"></div>
 
@@ -191,9 +149,35 @@ video {
 <audio id="audio2" src="audiopart2.mp3"></audio>
 
 <div id="subtitles"></div>
-<div id="fakeCursor"></div>
 
 <script>
+/* ===== HELPERS ===== */
+function wait(ms){return new Promise(res=>setTimeout(res, ms));}
+
+/* TYPEWRITER THAT HANDLES RED SPANS PROPERLY */
+async function typeText(element, htmlString, speed=50) {
+    element.innerHTML = "";
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = htmlString; // parse the HTML
+
+    for (let node of tempDiv.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            for (const ch of node.textContent) {
+                element.innerHTML += ch;
+                await wait(speed);
+            }
+        } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName === "SPAN") {
+            const spanEl = document.createElement("span");
+            if (node.style.color) spanEl.style.color = node.style.color;
+            element.appendChild(spanEl);
+            for (const ch of node.textContent) {
+                spanEl.innerHTML += ch;
+                await wait(speed);
+            }
+        }
+    }
+}
+
 /* ===== SPINNER ===== */
 const spinner = document.getElementById("spinner");
 for (let i = 0; i < 12; i++) {
@@ -222,12 +206,11 @@ setTimeout(() => {
 /* ===== NO BUTTON ===== */
 const noBtn = document.getElementById("noBtn");
 noBtn.onclick = () => {
-    document.getElementById("popup1").style.display = "none";
-    document.getElementById("subText").innerText = "you got a pretty serious virus on your laptop. just press yes kiddo";
+    document.getElementById("message").style.display = "block";
     noBtn.disabled = true;
 };
 
-/* ===== YES BUTTON ===== */
+/* ===== YES BUTTON LOGIC ===== */
 const yesBtn = document.getElementById("yesBtn");
 const video1 = document.getElementById("video1");
 const audio1 = document.getElementById("audio1");
@@ -236,48 +219,38 @@ const audio2 = document.getElementById("audio2");
 const transition = document.getElementById("transition");
 const subtitlesEl = document.getElementById("subtitles");
 
-function wait(ms){return new Promise(res=>setTimeout(res, ms));}
-
-/* Typed subtitles helper */
-async function typeLine(line){
-    subtitlesEl.innerHTML = "";
-    for(let i=0;i<line.length;i++){
-        subtitlesEl.innerHTML += line[i];
-        await wait(25); // typing speed, adjust if wanted
-    }
-}
-
-/* TIMED SUBTITLES PLAYBACK */
-async function playTimedSubs(subsList, startOffset=0){
-    const startTime = Date.now() - startOffset*1000;
+/* TIMED SUBTITLES WITH TYPEWRITER EFFECT */
+async function playTimedSubs(subsList){
+    const startTime = Date.now();
     for(const [text, sec] of subsList){
         const waitTime = sec*1000 - (Date.now() - startTime);
         if(waitTime>0) await wait(waitTime);
-        await typeLine(text);
+        await typeText(subtitlesEl, text, 40);
     }
     subtitlesEl.innerHTML = "";
 }
 
+/* YES BUTTON ACTION */
 yesBtn.onclick = async () => {
     document.getElementById("screen").style.display="none";
     document.getElementById("popup1").style.display="none";
-    transition.style.display="none";
+    document.getElementById("message").style.display="none";
 
-    // play video1 + audio1
     video1.style.display="block";
     video1.play();
     audio1.play();
+
     playTimedSubs([
         ["Well now.",0.6],
-        ["You didn’t really think it would be that easy, did you.?",2.6],
+        ["You didn’t really think it would be that easy, did you?",2.6],
         ["Anyhow.",9.1],
         ["For YOUR safety:",10.55],
-        ["<strong>PROTECT WHAT YOU WEAR.</strong>",13.1],
+        ["<span style='color:red'>PROTECT WHAT YOU WEAR.</span>",13.1],
         ["Unexpected events are not just possible.",15.45],
         ["They are scheduled.",19.5],
         ["Stay alert.",23.35],
         ["Stay vigil.",24.95],
-        ["<strong>A VIDEO MAY APPEAR ON INSTAGRAM ANY MOMENT NOW.</strong>",26.7],
+        ["<span style='color:red'>A VIDEO MAY APPEAR ON INSTAGRAM ANY MOMENT NOW.</span>",26.7],
         ["I would hate for you to miss the show.",30.95],
         ["Well now...",34.15],
         ["I guess we are...",35.65],
@@ -289,18 +262,15 @@ yesBtn.onclick = async () => {
         ["UNTILL NEVER AGAIN!",48.45]
     ]);
 
-    // After 45s show black overlay, keep subtitles on top
-    setTimeout(()=>{
-        transition.style.display="block";
-    }, 45000);
+    setTimeout(()=>{ transition.style.display="block"; }, 45000);
 
-    // When video1 ends, start video2/audio2, remove black overlay
     video1.onended = ()=>{
         transition.style.display="none";
         video1.style.display="none";
         video2.style.display="block";
         video2.play();
         audio2.play();
+
         playTimedSubs([
             ["Oh...",1.8],
             ["Thats embarrasing.",3],
@@ -319,6 +289,41 @@ yesBtn.onclick = async () => {
             ["Or should i say...",30.5],
             ["untill TOMORROW!",32.55]
         ]);
+    };
+
+    video2.onended = async ()=>{
+        video2.style.display="none";
+        transition.style.display="block";
+        subtitlesEl.innerHTML="";
+
+        const finalEl = document.createElement("div");
+        finalEl.style.position="fixed";
+        finalEl.style.top="35%";
+        finalEl.style.width="100%";
+        finalEl.style.textAlign="center";
+        finalEl.style.fontSize="64px";
+        finalEl.style.color="#00ff00";
+        finalEl.style.fontFamily="Courier New, monospace";
+        finalEl.style.zIndex="601";
+        document.body.appendChild(finalEl);
+
+        const subEl = document.createElement("div");
+        subEl.style.position="fixed";
+        subEl.style.top="55%";
+        subEl.style.width="100%";
+        subEl.style.textAlign="center";
+        subEl.style.fontSize="28px";
+        subEl.style.color="#00ff00";
+        subEl.style.fontFamily="Courier New, monospace";
+        subEl.style.zIndex="601";
+        subEl.innerText="have a happy last 100 days";
+        subEl.style.display = "none";
+        document.body.appendChild(subEl);
+
+        const finalText = "SENIOR ZENITH 2026";
+        await typeText(finalEl, finalText, 200);
+        await wait(1000);
+        subEl.style.display = "block";
     };
 };
 </script>
